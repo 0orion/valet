@@ -326,7 +326,7 @@ case class ChannelTransitionFail(channelId: ByteVector32, message: LightningMess
   override def toString: String = s"ChannelTransitionFail, related message=$message"
 }
 
-case class RemoteErrorException(details: String) extends RuntimeException {
+case class RemoteErrorException(details: String) extends RuntimeException(details) {
   override def toString: String = s"RemoteErrorException, details=$details"
 }
 

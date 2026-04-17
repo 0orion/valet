@@ -21,9 +21,31 @@ class SQLiteChannel(val db: DBInterface, channelTxFeesDb: DBInterface) extends C
     persistentChannelData
   }
 
-  override def all: Iterable[PersistentChannelData] =
-    db.select(ChannelTable.selectAllSql).iterable(_ byteVec ChannelTable.data)
-      .map(bits => ChannelCodecs.persistentDataCodec.decode(bits.toBitVector).require.value)
+  override def all: Iterable[PersistentChannelData] = new Iterable[PersistentChannelData] {
+    def iterator: Iterator[PersistentChannelData] = new Iterator[PersistentChannelData] {
+      private val batchSize = 10
+      private var offset = 0
+      private var currentBatch: Iterator[PersistentChannelData] = Iterator.empty
+      private var exhausted = false
+
+      def hasNext: Boolean = {
+        while (!currentBatch.hasNext && !exhausted) {
+          val sql = s"${ChannelTable.selectAllSql} LIMIT $batchSize OFFSET $offset"
+          val batch = try {
+            db.select(sql).iterable(_ byteVec ChannelTable.data)
+              .map(bits => ChannelCodecs.persistentDataCodec.decode(bits.toBitVector).require.value).toList
+          } catch {
+            case _: Throwable => Nil
+          }
+          if (batch.isEmpty) exhausted = true else offset += batchSize
+          currentBatch = batch.iterator
+        }
+        currentBatch.hasNext
+      }
+
+      def next: PersistentChannelData = currentBatch.next
+    }
+  }
 
   override def delete(channelId: ByteVector32): Unit =
     db.change(ChannelTable.killSql, channelId.toHex)
