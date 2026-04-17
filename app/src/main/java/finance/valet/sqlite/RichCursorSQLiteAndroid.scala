@@ -25,17 +25,11 @@ case class RichCursorSQLiteAndroid(c: Cursor) extends RichCursor { me =>
 
   @inline def int(key: Int): Int = c.getInt(key)
 
+  private val resultCount = c.getCount
+
   def iterator: Iterator[RichCursor] =
     new Iterator[RichCursor] {
-      private var started = false
-      def hasNext: Boolean = {
-        if (!started) {
-          started = true
-          c.moveToFirst
-        } else {
-          c.moveToNext
-        }
-      }
-      def next: RichCursor = me
+      def hasNext: Boolean = c.getPosition < resultCount - 1
+      def next: RichCursor = runAnd(me)(c.moveToNext)
     }
 }

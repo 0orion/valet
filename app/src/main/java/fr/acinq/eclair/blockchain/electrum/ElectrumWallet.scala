@@ -369,7 +369,9 @@ case class ElectrumData(ewt: ElectrumWalletType, blockchain: Blockchain,
     }
   }
 
-  lazy val utxos: Seq[Utxo] = unExcludedUtxos.filterNot(utxo => excludedOutPoints contains utxo.item.outPoint)
+  lazy val dustOutpoints: Seq[Utxo] = unExcludedUtxos.filter(utxo => utxo.item.value.sat < 546.sat)
+
+  lazy val utxos: Seq[Utxo] = unExcludedUtxos.filterNot(utxo => excludedOutPoints contains utxo.item.outPoint).filterNot(utxo => utxo.item.value.sat < 546.sat)
 
   // Remove status for each script hash for which we have pending requests, this will make us query script hash history for these script hashes again when we reconnect
   def reset: ElectrumData = copy(status = status -- pendingHistoryRequests, pendingHistoryRequests = Set.empty, pendingTransactionRequests = Set.empty, pendingHeadersRequests = Set.empty, lastReadyMessage = None)
