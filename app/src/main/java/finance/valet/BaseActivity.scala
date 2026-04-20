@@ -592,7 +592,9 @@ trait BaseActivity extends AppCompatActivity { me =>
     manager.hintDenom setText getString(dialog_up_to).format(canSend).html
   }
 
-  class CircularSpinnerView(val host: View) extends HasHostView
+  class CircularSpinnerView(val host: View) extends HasHostView {
+    val label: TextView = host.findViewById(R.id.progressBarLabel).asInstanceOf[TextView]
+  }
 
   class ChainSendView(val fromWallet: ElectrumEclairWallet, badge: Option[String], visibilityRes: Int) { me =>
     val body: ScrollView = getLayoutInflater.inflate(R.layout.frag_input_on_chain, null).asInstanceOf[ScrollView]
@@ -651,6 +653,7 @@ trait BaseActivity extends AppCompatActivity { me =>
     def switchToHardwareIncoming(alert: AlertDialog): Unit = {
       chainReaderView.chainButtonsView.chainCancelButton setOnClickListener onButtonTap(alert.dismiss)
       chainReaderView.chainButtonsView.chainEditButton setOnClickListener onButtonTap(me switchToEdit alert)
+      chainReaderView.chainButtonsView.chainText setText dialog_hw_scan_signed
       setVis(isVisible = false, chainReaderView.chainButtonsView.chainNextButton)
       for (sub <- chainSlideshowView.subscription) sub.unsubscribe
       switchButtons(alert, on = false)
@@ -658,8 +661,11 @@ trait BaseActivity extends AppCompatActivity { me =>
       chainReaderView.start
     }
 
-    def switchToSpinner(alert: AlertDialog): Unit = {
+    def switchToSpinner(alert: AlertDialog, labelText: String = null): Unit = {
       switchButtons(alert, on = false)
+      val hasLabel = labelText != null && labelText.nonEmpty
+      setVis(isVisible = hasLabel, circularSpinnerView.label)
+      if (hasLabel) circularSpinnerView.label.setText(labelText)
       switchTo(circularSpinnerView)
       haltProcesses
     }

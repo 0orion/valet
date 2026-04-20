@@ -442,7 +442,7 @@ object Transactions {
                         commitmentFormat: CommitmentFormat): Either[TxGenerationSkipped, HtlcTimeoutTx] = {
     val fee = htlcSecondStageFee(
       feeratePerKw,
-      commitmentFormat.htlcTimeoutWeight,
+      commitmentFormat.htlcSuccessWeight,
       commitmentFormat
     )
     val redeemScript = output.redeemScript
@@ -471,7 +471,7 @@ object Transactions {
                         commitmentFormat: CommitmentFormat): Either[TxGenerationSkipped, HtlcSuccessTx] = {
     val fee = htlcSecondStageFee(
       feeratePerKw,
-      commitmentFormat.htlcTimeoutWeight,
+      commitmentFormat.htlcSuccessWeight,
       commitmentFormat
     )
     val redeemScript = output.redeemScript

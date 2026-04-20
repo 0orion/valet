@@ -19,7 +19,9 @@
       "WebFetch(domain:bips.dev)",
       "Read(//tmp/applock_extract/layout/**)",
       "Read(//tmp/applock_extract/values/**)",
-      "Bash(find /app/valet/app/src/main/res/values* -type f)"
+      "Bash(find /app/valet/app/src/main/res/values* -type f)",
+      "Bash(awk -F'package ' '{print $2}')",
+      "Bash(awk -F'import ' '{print $2}')"
     ]
   }
 }
