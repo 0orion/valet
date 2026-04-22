@@ -79,12 +79,15 @@ object WalletApp {
   final val CUSTOM_ELECTRUM_ADDRESS = "customElectrumAddress"
   final val CUSTOM_BACKUP_LOCATION = "customBackupLocation"
   final val SHOW_RATE_US = "showRateUs"
+  final val GAP_LIMIT = "gapLimit"
+  final val DEFAULT_GAP_LIMIT = 10
 
   def useAuth: Boolean = AppLock.isEnrolled(app)
   def fiatCode: String = app.prefs.getString(FIAT_CODE, "usd")
   def ensureTor: Boolean = app.prefs.getBoolean(ENSURE_TOR, false)
   def maximizedView: Boolean = app.prefs.getBoolean(MAXIMIZED_VIEW, true)
   def showRateUs: Boolean = app.prefs.getBoolean(SHOW_RATE_US, true)
+  def gapLimit: Int = app.prefs.getInt(GAP_LIMIT, DEFAULT_GAP_LIMIT)
 
   final val CHECKED_BUTTONS = "checkedButtons"
   def getCheckedButtons(default: Set[String] = Set.empty): mutable.Set[String] = app.prefs.getStringSet(CHECKED_BUTTONS, default.asJava).asScala
@@ -205,7 +208,7 @@ object WalletApp {
 
     LNParams.cm = new ChannelMaster(payBag, chanBag, extDataBag, pf)
 
-    val params = WalletParameters(extDataBag, chainWalletBag, txDataBag, dustLimit = 546L.sat)
+    val params = WalletParameters(extDataBag, chainWalletBag, txDataBag, dustLimit = 546L.sat, gapLimit = WalletApp.gapLimit)
     val electrumPool = LNParams.loggedActor(Props(classOf[ElectrumClientPool], LNParams.blockCount, LNParams.chainHash, LNParams.ec), "connection-pool")
     val sync = LNParams.loggedActor(Props(classOf[ElectrumChainSync], electrumPool, params.headerDb, LNParams.chainHash), "chain-sync")
     val watcher = LNParams.loggedActor(Props(classOf[ElectrumWatcher], LNParams.blockCount, electrumPool), "channel-watcher")

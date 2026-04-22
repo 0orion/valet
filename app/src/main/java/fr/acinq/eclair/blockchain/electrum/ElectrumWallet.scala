@@ -227,7 +227,7 @@ class ElectrumWallet(client: ActorRef, chainSync: ActorRef, params: WalletParame
       val notConnected = Error(code = -1, "wallet is not connected").asSome
       stay replying ElectrumClient.BroadcastTransactionResponse(tx, notConnected)
 
-    case Event(KEY_REFILL, data) if data.firstUnusedChangeKeys.size < MAX_RECEIVE_ADDRESSES =>
+    case Event(KEY_REFILL, data) if data.firstUnusedChangeKeys.size < params.gapLimit =>
       val newKey = derivePublicKey(ewt.changeMaster, data.changeKeys.last.path.lastChildNumber + 1)
       val newKeyScriptHash = computeScriptHash(ewt writePublicKeyScriptHash newKey.publicKey)
       val status1 = data.status.updated(newKeyScriptHash, new String)
@@ -236,7 +236,7 @@ class ElectrumWallet(client: ActorRef, chainSync: ActorRef, params: WalletParame
       client ! ElectrumClient.ScriptHashSubscription(newKeyScriptHash, self)
       stay using persistAndNotify(data1)
 
-    case Event(KEY_REFILL, data) if data.firstUnusedAccountKeys.size < MAX_RECEIVE_ADDRESSES =>
+    case Event(KEY_REFILL, data) if data.firstUnusedAccountKeys.size < params.gapLimit =>
       val newKey = derivePublicKey(ewt.accountMaster, data.accountKeys.last.path.lastChildNumber + 1)
       val newKeyScriptHash = computeScriptHash(ewt writePublicKeyScriptHash newKey.publicKey)
       val status1 = data.status.updated(newKeyScriptHash, new String)
@@ -318,8 +318,8 @@ case class AccountAndXPrivKey(xPriv: ExtendedPrivateKey, master: ExtendedPrivate
 
 case class TransactionDelta(spentUtxos: Seq[Utxo], feeOpt: Option[Satoshi], received: Satoshi, sent: Satoshi)
 
-case class WalletParameters(headerDb: HeaderDb, walletDb: WalletDb, txDb: SQLiteTx, dustLimit: Satoshi) {
-  lazy val emptyPersistentData: PersistentData = PersistentData(accountKeysCount = MAX_RECEIVE_ADDRESSES, changeKeysCount = MAX_RECEIVE_ADDRESSES)
+case class WalletParameters(headerDb: HeaderDb, walletDb: WalletDb, txDb: SQLiteTx, dustLimit: Satoshi, gapLimit: Int = MAX_RECEIVE_ADDRESSES) {
+  lazy val emptyPersistentData: PersistentData = PersistentData(accountKeysCount = gapLimit, changeKeysCount = gapLimit)
   lazy val emptyPersistentDataBytes: ByteVector = persistentDataCodec.encode(emptyPersistentData).require.toByteVector
 }
 
