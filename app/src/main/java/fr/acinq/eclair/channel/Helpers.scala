@@ -188,11 +188,17 @@ object Helpers {
     }
 
     def checkClosingSignature(commitments: NormalCommits, localScriptPubkey: ByteVector, remoteScriptPubkey: ByteVector, remote: ClosingSigned): Transaction = {
-      val lastCommitFeeSatoshi = commitments.commitInput.txOut.amount - commitments.localCommit.publishableTxs.commitTx.tx.txOut.map(_.amount).sum
-      if (remote.feeSatoshis > lastCommitFeeSatoshi) throw ChannelTransitionFail(commitments.channelId, remote)
-
       val localFundingKey = commitments.localParams.keys.fundingKey.publicKey
       val (closingTx, closingSigned) = makeClosingTx(commitments, localScriptPubkey, remoteScriptPubkey, remote.feeSatoshis)
+
+      // Zero-fee anchor commit txs pay no fee, so the legacy "closing fee <= last commit fee" bound collapses to zero
+      // Fall back to bounding the closing fee against the closing tx weight at a generous multiple of the commit feerate
+      val lastCommitFeeSatoshi = commitments.commitInput.txOut.amount - commitments.localCommit.publishableTxs.commitTx.tx.txOut.map(_.amount).sum
+      val maxAcceptableFee: Satoshi = if (lastCommitFeeSatoshi > 0L.sat) lastCommitFeeSatoshi else {
+        val signedDummy = Transactions.addSigs(closingTx, invalidPubKey, commitments.remoteParams.fundingPubKey, Transactions.PlaceHolderSig, Transactions.PlaceHolderSig).tx
+        Transactions.weight2fee(commitments.localCommit.spec.feeratePerKw * 5L, Transaction.weight(signedDummy))
+      }
+      if (remote.feeSatoshis > maxAcceptableFee) throw ChannelTransitionFail(commitments.channelId, remote)
 
       val isAllUtxosAboveDust = checkClosingDustAmounts(closingTx)
       if (!isAllUtxosAboveDust) throw ChannelTransitionFail(commitments.channelId, remote)
