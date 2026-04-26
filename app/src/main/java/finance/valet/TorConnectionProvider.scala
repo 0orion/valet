@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import android.app.ActivityManager
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
+import android.os.Build
 import immortan.ConnectionProvider
 import immortan.crypto.Tools._
 import okhttp3.OkHttpClient
@@ -22,19 +23,27 @@ class TorConnectionProvider(context: Context) extends ConnectionProvider {
 
   private val torServiceClassReference = classOf[TorService]
 
-  def doWhenReady(action: => Unit): Unit = {
+  @volatile private var pendingReceiver: Option[BroadcastReceiver] = None
+
+  def doWhenReady(action: => Unit): Unit = synchronized {
+    pendingReceiver.foreach(r => try context.unregisterReceiver(r) catch none)
+
     lazy val once: BroadcastReceiver = new BroadcastReceiver {
       override def onReceive(context: Context, intent: Intent): Unit =
         if (intent.getStringExtra(TorService.EXTRA_STATUS) == TorService.STATUS_ON) {
           try context.unregisterReceiver(once) catch none
+          TorConnectionProvider.this.synchronized {
+            if (pendingReceiver.contains(once)) pendingReceiver = None
+          }
           action
         }
     }
 
-    val serviceIntent = new Intent(context, torServiceClassReference)
+    pendingReceiver = Some(once)
     val intentFilter = new IntentFilter(TorService.ACTION_STATUS)
-    context.registerReceiver(once, intentFilter)
-    context.startService(serviceIntent)
+    if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(once, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+    else context.registerReceiver(once, intentFilter)
+    context.startService(new Intent(context, torServiceClassReference))
   }
 
   override def getSocket: Socket = new Socket(proxy)

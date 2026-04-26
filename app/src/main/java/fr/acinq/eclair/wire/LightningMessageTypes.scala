@@ -198,19 +198,21 @@ case class IPv6(ipv6: Inet6Address, port: Int) extends NodeAddress {
 }
 
 case class Tor2(tor2: String, port: Int) extends OnionAddress {
-  override def socketAddress: InetSocketAddress = new InetSocketAddress(tor2 + NodeAddress.onionSuffix, port)
+  override def socketAddress: InetSocketAddress = InetSocketAddress.createUnresolved(tor2 + NodeAddress.onionSuffix, port)
 
   override def toString: String = s"[ONION] $tor2:$port"
 }
 
 case class Tor3(tor3: String, port: Int) extends OnionAddress {
-  override def socketAddress: InetSocketAddress = new InetSocketAddress(tor3 + NodeAddress.onionSuffix, port)
+  override def socketAddress: InetSocketAddress = InetSocketAddress.createUnresolved(tor3 + NodeAddress.onionSuffix, port)
 
   override def toString: String = s"[ONION] $tor3:$port"
 }
 
 case class Domain(domain: String, port: Int) extends NodeAddress {
-  override def socketAddress: InetSocketAddress = new InetSocketAddress(domain, port)
+  override def socketAddress: InetSocketAddress =
+    if (LNParams.connectionProvider != null && LNParams.connectionProvider.proxyAddress.isDefined) InetSocketAddress.createUnresolved(domain, port)
+    else new InetSocketAddress(domain, port)
 
   override def toString: String = s"$domain:$port"
 }

@@ -72,9 +72,9 @@ class ElectrumClient(serverAddress: InetSocketAddress, ssl: SSL)(implicit val ec
     }
   }
 
-  val channelOpenFuture: ChannelFuture = b.connect(serverAddress.getHostName, serverAddress.getPort)
-
   if (LNParams.connectionProvider.proxyAddress.isDefined) b.resolver(NoopAddressResolverGroup.INSTANCE)
+
+  val channelOpenFuture: ChannelFuture = b.connect(serverAddress.getHostName, serverAddress.getPort)
 
   channelOpenFuture addListeners new ChannelFutureListener {
     override def operationComplete(future: ChannelFuture): Unit = {
