@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.{LinearLayout, TextView}
 import androidx.appcompat.app.AlertDialog
 import BaseActivity.StringOps
+import finance.valet.Colors._
 import finance.valet.R.string._
 import com.ornach.nobobutton.NoboButton
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -65,7 +66,6 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
     DataLossProtect -> findViewById(R.id.OptionDataLossProtect).asInstanceOf[TextView],
     StaticRemoteKey -> findViewById(R.id.StaticRemoteKey).asInstanceOf[TextView],
     HostedChannels -> findViewById(R.id.HostedChannels).asInstanceOf[TextView],
-    ChainSwap -> findViewById(R.id.ChainSwap).asInstanceOf[TextView],
     Wumbo -> findViewById(R.id.Wumbo).asInstanceOf[TextView]
   )
 
@@ -88,6 +88,7 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
   private lazy val incomingIgnoringListener = new DisconnectListener
 
   private var criticalSupportAvailable: Boolean = false
+  private var theirSupportsWumbo: Boolean = false
   private var whenBackPressed: Runnable = UITask(finish)
   private var hasInfo: HasRemoteInfo = _
 
@@ -95,6 +96,7 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
     override def onOperational(worker: CommsTower.Worker, theirInit: Init): Unit = UITask {
       val theirInitSupports: Feature with InitFeature => Boolean = LNParams.isPeerSupports(theirInit)
       criticalSupportAvailable = criticalFeatures.forall(theirInitSupports)
+      theirSupportsWumbo = theirInitSupports(Wumbo)
 
       featureTextViewMap foreach {
         case (feature, view) if theirInitSupports(feature) =>
@@ -164,6 +166,8 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
 
   def doFundNewChannel(fromWallet: ElectrumEclairWallet): Unit = {
     val sendView: ChainSendView = new ChainSendView(fromWallet, badge = None, visibilityRes = -1)
+    val minFunding: Satoshi = LNParams.minChanDustLimit * 100
+    val wumboLimit: Satoshi = Satoshi(16777216L)
 
     def makeFunding(fundingAmount: Satoshi, feeratePerKw: FeeratePerKw, local: PublicKey, remote: PublicKey): Future[GenerateTxResponse] =
       fromWallet.makeFundingTx(Script.write(Script pay2wsh Scripts.multiSig2of2(local, remote).toList), fundingAmount, feeratePerKw)
@@ -176,11 +180,22 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
 
     def doFundRunnable(channel: ChannelNormal, response: GenerateTxResponse): Runnable = UITask {
       // At this point we have a real signed funding, relay it to channel and indicate progress
-      sendView.switchToSpinner(alert)
+      sendView.switchToSpinner(alert, me getString rpa_spinner_publishing)
       channel process response
     }
 
     def attempt(alert: AlertDialog): Unit = {
+      val requested = sendView.manager.resultMsat.truncateToSatoshi
+      if (requested < minFunding) {
+        val minHuman = WalletApp.denom.parsedWithSign(minFunding.toMilliSatoshi, cardIn, cardZero)
+        WalletApp.app.quickToast(getString(rpa_err_min_funding).format(minHuman))
+      } else if (!theirSupportsWumbo && requested >= wumboLimit) {
+        val maxHuman = WalletApp.denom.parsedWithSign((wumboLimit - 1L.sat).toMilliSatoshi, cardIn, cardZero)
+        WalletApp.app.quickToast(getString(rpa_err_no_wumbo).format(maxHuman))
+      } else doAttempt(alert)
+    }
+
+    def doAttempt(alert: AlertDialog): Unit = {
       def revertInformDismiss(reason: Throwable): Unit = runAnd(alert.dismiss)(me revertAndInform reason)
       runFutureProcessOnUI(makeFakeFunding(sendView.manager.resultMsat.truncateToSatoshi, feeView.rate), revertInformDismiss) { fakeResponse =>
         // It is fine to use the first map element here: we send to single address so response will always have a single element (change not included)
@@ -188,7 +203,7 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
         val totalFundAmount = fakeResponse.pubKeyScriptToAmount.values.head.toMilliSatoshi
         val finalSendButton = sendView.chainConfirmView.chainButtonsView.chainNextButton
 
-        sendView.switchToSpinner(alert)
+        sendView.switchToSpinner(alert, me getString rpa_spinner_preparing)
         stopAcceptingIncomingOffers
 
         def processLocalFunding: Unit =
@@ -235,11 +250,20 @@ class RemotePeerActivity extends ChanErrorHandlerActivity with ExternalDataCheck
       val fundTitle = new TitleView(me getString rpa_open_nc)
       val builder = titleBodyAsViewBuilder(fundTitle.asColoredView(me chainWalletBackground fromWallet), sendView.manager.content)
       addFlowChip(fundTitle.flow, getString(dialog_send_btc_from).format(fromWallet.info.label), R.drawable.border_yellow)
-      def setMax(fundAlert: AlertDialog): Unit = sendView.manager.updateText(fromWallet.info.lastBalance.toMilliSatoshi)
+
+      def setMax(fundAlert: AlertDialog): Unit = {
+        val max = fromWallet.info.lastBalance
+        sendView.manager.updateText(max.toMilliSatoshi)
+        runFutureProcessOnUI(makeFakeFunding(max, feeView.rate), _ => ()) { response =>
+          val feeAdjusted = response.pubKeyScriptToAmount.values.headOption.getOrElse(max).toMilliSatoshi
+          sendView.manager.updateText(feeAdjusted)
+        }
+      }
+
       mkCheckFormNeutral(attempt, none, setMax, builder, dialog_ok, dialog_cancel, dialog_max)
     }
 
-    lazy val feeView = new FeeView[GenerateTxResponse](FeeratePerByte(1L.sat), sendView.body) {
+    lazy val feeView: FeeView[GenerateTxResponse] = new FeeView[GenerateTxResponse](FeeratePerByte(1L.sat), sendView.body) {
       rate = LNParams.feeRates.info.onChainFeeConf.feeEstimator.getFeeratePerKw(LNParams.feeRates.info.onChainFeeConf.feeTargets.fundingBlockTarget)
 
       worker = new ThrottledWork[String, GenerateTxResponse] {

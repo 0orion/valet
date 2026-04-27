@@ -79,12 +79,15 @@ object WalletApp {
   final val CUSTOM_ELECTRUM_ADDRESS = "customElectrumAddress"
   final val CUSTOM_BACKUP_LOCATION = "customBackupLocation"
   final val SHOW_RATE_US = "showRateUs"
+  final val GAP_LIMIT = "gapLimit"
+  final val DEFAULT_GAP_LIMIT = 10
 
   def useAuth: Boolean = AppLock.isEnrolled(app)
   def fiatCode: String = app.prefs.getString(FIAT_CODE, "usd")
   def ensureTor: Boolean = app.prefs.getBoolean(ENSURE_TOR, false)
   def maximizedView: Boolean = app.prefs.getBoolean(MAXIMIZED_VIEW, true)
   def showRateUs: Boolean = app.prefs.getBoolean(SHOW_RATE_US, true)
+  def gapLimit: Int = app.prefs.getInt(GAP_LIMIT, DEFAULT_GAP_LIMIT)
 
   final val CHECKED_BUTTONS = "checkedButtons"
   def getCheckedButtons(default: Set[String] = Set.empty): mutable.Set[String] = app.prefs.getStringSet(CHECKED_BUTTONS, default.asJava).asScala
@@ -147,11 +150,11 @@ object WalletApp {
 
     // In case these are needed early
     LNParams.logBag = new SQLiteLog(miscInterface)
-    LNParams.chainHash = Block.LivenetGenesisBlock.hash
+    LNParams.chainHash = Block.Testnet4GenesisBlock.hash
     LNParams.routerConf = RouterConf(initRouteMaxLength = 10, LNParams.maxCltvExpiryDelta)
     LNParams.connectionProvider = if (ensureTor) new TorConnectionProvider(app) else new ClearnetConnectionProvider
     LNParams.ourInit = LNParams.createInit
-    LNParams.syncParams = new SyncParams
+    LNParams.syncParams = new TestNet4SyncParams
     LNParams.ourInit = LNParams.createInit
   }
 
@@ -192,18 +195,20 @@ object WalletApp {
       case _ if currentCustomElectrum.isSuccess => ElectrumServerAddress(currentCustomElectrum.get.socketAddress, SSL.DECIDE).asSome.toSet
       case Block.LivenetGenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_mainnet.json")
       case Block.TestnetGenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_testnet.json")
+      case Block.Testnet4GenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_testnet4.json")
       case _ => throw new RuntimeException
     }
 
     CheckPoint.loadFromChainHash = {
       case Block.LivenetGenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_mainnet.json")
       case Block.TestnetGenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_testnet.json")
+      case Block.Testnet4GenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_testnet4.json")
       case _ => throw new RuntimeException
     }
 
     LNParams.cm = new ChannelMaster(payBag, chanBag, extDataBag, pf)
 
-    val params = WalletParameters(extDataBag, chainWalletBag, txDataBag, dustLimit = 546L.sat)
+    val params = WalletParameters(extDataBag, chainWalletBag, txDataBag, dustLimit = 546L.sat, gapLimit = WalletApp.gapLimit)
     val electrumPool = LNParams.loggedActor(Props(classOf[ElectrumClientPool], LNParams.blockCount, LNParams.chainHash, LNParams.ec), "connection-pool")
     val sync = LNParams.loggedActor(Props(classOf[ElectrumChainSync], electrumPool, params.headerDb, LNParams.chainHash), "chain-sync")
     val watcher = LNParams.loggedActor(Props(classOf[ElectrumWatcher], LNParams.blockCount, electrumPool), "channel-watcher")

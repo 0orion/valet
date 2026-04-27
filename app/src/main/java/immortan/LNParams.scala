@@ -104,10 +104,13 @@ object LNParams {
       (VariableLengthOnion, FeatureSupport.Optional),
       (ShutdownAnySegwit, FeatureSupport.Optional),
       (StaticRemoteKey, FeatureSupport.Optional),
+      (AnchorOutputs, FeatureSupport.Optional),
+      (AnchorOutputsZeroFeeHtlcTx, FeatureSupport.Optional),
+      (ChannelType, FeatureSupport.Optional),
+      (ScidAlias, FeatureSupport.Optional),
       (DataLossProtect, FeatureSupport.Optional),
       (HostedChannels, FeatureSupport.Optional),
       (PaymentSecret, FeatureSupport.Optional),
-      (ChainSwap, FeatureSupport.Optional),
       (Wumbo, FeatureSupport.Optional)
     ), tlvStream)
   }
@@ -191,16 +194,16 @@ case class WalletExt(wallets: List[ElectrumEclairWallet], catcher: ActorRef, syn
 }
 
 class SyncParams {
-  val satm: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"02208879ee204651619a51f6e48e159da645f1acbf417b3b399358ea7784df066f"), NodeAddress.unresolved(9735, host = 157, 230, 113, 217), "SATM")
+  val satm: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"02cd1b7bc418fac2dc99f0ba350d60fa6c45fde5ab6017ee14df6425df485fb1dd"), NodeAddress.unresolved(80, host = 134, 209, 228, 207), "SATM")
+  val sts: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"02208879ee204651619a51f6e48e159da645f1acbf417b3b399358ea7784df066f"), NodeAddress.unresolved(9735, host = 157, 230, 113, 217), "StS")
+
   val bCashIsTrash: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"0298f6074a454a1f5345cb2a7c6f9fce206cd0bf675d177cdbf0ca7508dd28852f"), NodeAddress.unresolved(9735, host = 73, 119, 255, 56), "bCashIsTrash")
-  val conductor: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"03c436af41160a355fc1ed230a64f6a64bcbd2ae50f12171d1318f9782602be601"), NodeAddress.unresolved(9735, host = 18, 191, 89, 219), "Conductor")
   val silentBob: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"02e9046555a9665145b0dbd7f135744598418df7d61d3660659641886ef1274844"), NodeAddress.unresolved(9735, host = 31, 16, 52, 37), "SilentBob")
-  val lightning: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"03baa70886d9200af0ffbd3f9e18d96008331c858456b16e3a9b41e735c6208fef"), NodeAddress.unresolved(9735, host = 45, 20, 67, 1), "LIGHTNING")
   val acinq: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"), NodeAddress.unresolved(9735, host = 34, 239, 230, 56), "ACINQ")
   val localNode: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"035912832c3eea544dc1c1bd4569f3f1f4ef58887c4df88fa17a899c84f093e3e6"), NodeAddress.unresolved(56175, host = 10, 0, 2, 2), "localnode")
 
-  val syncNodes: Set[RemoteNodeInfo] = Set(satm, bCashIsTrash, localNode, conductor, silentBob, lightning, acinq)
-  val phcSyncNodes: Set[RemoteNodeInfo] = Set(satm)
+  val syncNodes: Set[RemoteNodeInfo] = Set(satm, sts, bCashIsTrash, silentBob, acinq, localNode)
+  val phcSyncNodes: Set[RemoteNodeInfo] = Set(satm, sts)
 
   val maxPHCCapacity: MilliSatoshi = MilliSatoshi(100000000000000L) // PHC can not be larger than 1000 BTC
   val minPHCCapacity: MilliSatoshi = MilliSatoshi(1000000000L) // PHC can not be smaller than 0.01 BTC
@@ -214,13 +217,15 @@ class SyncParams {
   val chunksToWait = 4 // Wait for at least this much chunk iterations from any peer before recording results
 }
 
-class TestNetSyncParams extends SyncParams {
-  val sbw: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"03b8534f2d84de39a68d1359f6833fde819b731e188ddf633a666f7bf8c1d7650a"), NodeAddress.unresolved(9735, host = 45, 61, 187, 156), "SBW")
-  val endurance: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"03933884aaf1d6b108397e5efe5c86bcf2d8ca8d2f700eda99db9214fc2712b134"), NodeAddress.unresolved(9735, host = 76, 223, 71, 211), "Endurance")
-  override val localNode: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"035912832c3eea544dc1c1bd4569f3f1f4ef58887c4df88fa17a899c84f093e3e6"), NodeAddress.unresolved(56175, host = 10, 0, 2, 2), "localhost")
-  override val syncNodes: Set[RemoteNodeInfo] = Set(endurance, localNode, sbw)
-  override val phcSyncNodes: Set[RemoteNodeInfo] = Set(localNode, sbw)
-  override val minCapacity: MilliSatoshi = MilliSatoshi(100000000L)
+class TestNet4SyncParams extends SyncParams {
+  val atomiq: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"024c6e1edd12f0792d0c1ddda3abc6e2fde6bf89f2848e00cf8d6a58fabb6c3ab6"), NodeAddress.unresolved(9735, host = 81, 17, 102, 136), "Atomiq")
+  val noname0: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"0264fa477e2bb4e8c1eadf20eb4408c28026be7b640be3532b8f292bb719268f84"), NodeAddress.unresolved(9735, host = 86, 104, 228, 145), "Noname0")
+  val noname1: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"020d84fb6ad938545c15633b38db9e3d6dc34205295359611ae817fa0c417066f7"), NodeAddress.unresolved(9735, host = 54, 252, 10, 243), "Noname1")
+  val noname2: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"02f0bf82f730d2e68453cc612c3e7ca5e021eaa1ead8250a6380c551d1d43bdc1b"), NodeAddress.unresolved(9735, host = 109, 123, 236, 96), "Noname2")
+  override val localNode: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"022b2053758559dbfd4dee6b89067cd17d37ec7e26edb2f7b58baac501add4b72b"), NodeAddress.unresolved(9735, host = 192, 168, 2, 11), "localhost")
+  override val syncNodes: Set[RemoteNodeInfo] = Set(atomiq, noname0, noname1, noname2)
+  override val phcSyncNodes: Set[RemoteNodeInfo] = Set.empty
+  override val minCapacity: MilliSatoshi = MilliSatoshi(1000000L)
   override val minNormalChansForPHC = 1
   override val maxNodesToSyncFrom = 1
   override val acceptThreshold = 0

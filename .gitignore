@@ -1,6 +1,9 @@
 .idea/
 app/app.iml
 .gradle/
+app/gradlew
+app/gradlew.bat
+app/gradle/
 app/.cxx/
 app/.externalNativeBuild/
 app/build/
@@ -16,4 +19,10 @@ target/
 *.keystore
 *.jks
 .env
-
+*.apk
+*.idsig
+*.zip
+*.cer
+*.bat
+*.md
+.claude/settings.local.json

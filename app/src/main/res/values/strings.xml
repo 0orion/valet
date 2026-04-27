@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="lang">eng</string>
-    <string name="app_name">Valet</string>
+    <string name="app_name">Valet Testnet</string>
     <string name="sources">View source code</string>
     <string name="twitter">Follow us on Twitter</string>
     <string name="manual">Read manual</string>
@@ -23,6 +23,7 @@
     <string name="search_recent">Search recent activity</string>
     <string name="emergency_mode">Something went wrong</string>
     <string name="error_log">Export error logs</string>
+    <string name="error_log_clear">Clear error logs</string>
 
     <string name="setup_title">Wallet setup</string>
     <string name="setup_create_new">Create new wallet</string>
@@ -226,6 +227,11 @@
     <string name="rpa_request_ln_resync">Request LN graph resync</string>
     <string name="rpa_share_node_id">Share node ID</string>
     <string name="rpa_open_nc">Fund new channel</string>
+    <string name="rpa_spinner_preparing">Preparing\u2026</string>
+    <string name="rpa_spinner_publishing">Publishing funding transaction\u2026</string>
+    <string name="rpa_err_min_funding">Minimum channel funding is %1$s</string>
+    <string name="rpa_err_no_wumbo">This peer does not support large channels (Wumbo). Maximum funding is %1$s</string>
+    <string name="dialog_hw_scan_signed">Scan signed transaction from your hardware wallet</string>
 
     <!-- /Remote peer activity -->
 
@@ -259,6 +265,10 @@
     <string name="settings_custom_electrum_enabled">Using custom Electrum node</string>
     <string name="settings_custom_electrum_disabled_tip">Random nodes are used currently</string>
     <string name="settings_custom_electrum_restart_notice">Restart to apply changes</string>
+
+    <string name="settings_gap_limit">Address scan gap limit</string>
+    <string name="settings_gap_limit_info">Current: %1$d addresses</string>
+    <string name="settings_gap_limit_tip">Number of unused addresses kept ahead during HD wallet scan. Higher values find more historical activity but slow startup.</string>
 
     <string name="settings_view_revocery_phrase_ext">These words allow to restore wallet balance on any device, please keep it secret at all times!</string>
     <string name="settings_view_revocery_phrase">View BIP39 recovery phrase</string>

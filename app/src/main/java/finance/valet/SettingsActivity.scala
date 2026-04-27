@@ -24,7 +24,7 @@ import immortan.crypto.Tools._
 import immortan.utils.{BtcDenomination, SatDenomination}
 import immortan.{ChannelMaster, LNParams}
 
-import scala.util.Success
+import scala.util.{Success, Try}
 
 
 abstract class SettingsHolder(host: BaseActivity) {
@@ -65,6 +65,7 @@ class SettingsActivity extends BaseCheckActivity with HasTypicalChainFee with Ch
     electrum.updateView
     setFiat.updateView
     setBtc.updateView
+    setGapLimit.updateView
 
     useBiometric.updateView
     enforceTor.updateView
@@ -145,7 +146,7 @@ class SettingsActivity extends BaseCheckActivity with HasTypicalChainFee with Ch
         case _ => ()
       }
       val uri = resultData.getData
-      getContentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+      Try(getContentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
       saveDirectory(uri.toString).commit
       backupLocation.updateView
       WalletApp.backupSaveWorker.replaceWork(true)
@@ -304,6 +305,34 @@ class SettingsActivity extends BaseCheckActivity with HasTypicalChainFee with Ch
     }
   }
 
+  lazy private[this] val setGapLimit: SettingsHolder = new SettingsHolder(me) {
+    setVis(isVisible = false, settingsCheck)
+    settingsTitle.setText(settings_gap_limit)
+
+    override def updateView: Unit =
+      settingsInfo.setText(getString(settings_gap_limit_info).format(WalletApp.gapLimit))
+
+    view setOnClickListener onButtonTap {
+      val (container, extraInputLayout, extraInput) = singleInputPopup
+      val builder = titleBodyAsViewBuilder(getString(settings_gap_limit).asDefView, container)
+      mkCheckForm(alert => runAnd(alert.dismiss)(proceed), none, builder, dialog_ok, dialog_cancel)
+      extraInputLayout.setHint(settings_gap_limit_tip)
+      extraInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER)
+      extraInput.setText(WalletApp.gapLimit.toString)
+      showKeys(extraInput)
+
+      def proceed: Unit = {
+        val parsed = Try(extraInput.getText.toString.trim.toInt).toOption.filter(n => n >= 1 && n <= 1000)
+        parsed.foreach { value =>
+          WalletApp.app.prefs.edit.putInt(WalletApp.GAP_LIMIT, value).commit
+          updateView
+          def onOk(snack: Snackbar): Unit = runAnd(snack.dismiss)(WalletApp.restart)
+          snack(settingsContainer, getString(settings_custom_electrum_restart_notice).html, R.string.dialog_ok, onOk)
+        }
+      }
+    }
+  }
+
   lazy private[this] val useBiometric: SettingsHolder = new SettingsHolder(me) {
     def updateView: Unit = settingsCheck.setChecked(WalletApp.useAuth)
 
@@ -360,7 +389,13 @@ class SettingsActivity extends BaseCheckActivity with HasTypicalChainFee with Ch
     for (count <- LNParams.logBag.count if count > 0) {
       def exportLog: Unit = me share LNParams.logBag.recent.map(_.asString).mkString("\n\n")
       val errorCount = s"${me getString error_log} <font color=$cardZero>$count</font>"
-      addFlowChip(links.flow, errorCount, R.drawable.border_yellow, _ => exportLog)
+      val exportChip = addFlowChip(links.flow, errorCount, R.drawable.border_yellow, _ => exportLog)
+      var clearChip: TextView = null
+      clearChip = addFlowChip(links.flow, me getString error_log_clear, R.drawable.border_yellow, _ => {
+        LNParams.logBag.clear()
+        exportChip setVisibility View.GONE
+        clearChip setVisibility View.GONE
+      })
     }
 
     settingsContainer.addView(settingsPageitle.view)
@@ -371,6 +406,7 @@ class SettingsActivity extends BaseCheckActivity with HasTypicalChainFee with Ch
     settingsContainer.addView(electrum.view)
     settingsContainer.addView(setFiat.view)
     settingsContainer.addView(setBtc.view)
+    settingsContainer.addView(setGapLimit.view)
 
     settingsContainer.addView(useBiometric.view)
     settingsContainer.addView(enforceTor.view)

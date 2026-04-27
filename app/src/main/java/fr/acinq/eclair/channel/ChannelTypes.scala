@@ -314,6 +314,10 @@ case class ChannelReserveTooHigh(channelId: ByteVector32, reserveToFundingRatio:
   override def toString: String = s"DustLimitTooSmall, reserveToFundingRatio=$reserveToFundingRatio, maxReserveToFundingRatio=$maxReserveToFundingRatio"
 }
 
+case class MissingChannelType(channelId: ByteVector32) extends RuntimeException { override def toString: String = "MissingChannelType" }
+
+case class InvalidChannelType(channelId: ByteVector32, channelType: ChannelType) extends RuntimeException { override def toString: String = s"InvalidChannelType, channelType=$channelType" }
+
 case class ExpiredHtlcInNormalChannel(channelId: ByteVector32, sentExpiredRouted: Boolean, expiredReceivedRevealed: Boolean) extends RuntimeException {
   override def toString: String = s"ChannelTransitionFail, sentExpiredRouted=$sentExpiredRouted, expiredReceivedRevealed=$expiredReceivedRevealed"
 }
@@ -322,7 +326,7 @@ case class ChannelTransitionFail(channelId: ByteVector32, message: LightningMess
   override def toString: String = s"ChannelTransitionFail, related message=$message"
 }
 
-case class RemoteErrorException(details: String) extends RuntimeException {
+case class RemoteErrorException(details: String) extends RuntimeException(details) {
   override def toString: String = s"RemoteErrorException, details=$details"
 }
 

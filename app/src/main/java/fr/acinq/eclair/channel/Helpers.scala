@@ -21,6 +21,17 @@ import scala.util.Try
 
 object Helpers {
   def validateParamsFundee(open: OpenChannel, commits: NormalCommits): Unit = {
+    (open.channelType_opt, commits.channelFeatures.channelType_opt) match {
+      case (None, None) => ()
+      case (Some(proposed: SupportedChannelType), Some(local))
+        if proposed == local =>
+        ()
+      case (Some(proposed), _) =>
+        throw InvalidChannelType(open.temporaryChannelId, proposed)
+      case _ =>
+        throw MissingChannelType(open.temporaryChannelId)
+    }
+
     val reserveToFundingRatio = open.channelReserveSatoshis.toLong.toDouble / Math.max(open.fundingSatoshis.toLong, 1L)
     if (reserveToFundingRatio > LNParams.maxReserveToFundingRatio) throw ChannelReserveTooHigh(open.temporaryChannelId, reserveToFundingRatio, LNParams.maxReserveToFundingRatio)
     if (open.maxAcceptedHtlcs < commits.localParams.maxAcceptedHtlcs) throw InvalidMinAcceptedHtlcs(open.temporaryChannelId, open.maxAcceptedHtlcs, commits.localParams.maxAcceptedHtlcs)
@@ -47,6 +58,17 @@ object Helpers {
   }
 
   def validateParamsFunder(open: OpenChannel, accept: AcceptChannel): Unit = {
+    (open.channelType_opt, accept.channelType_opt) match {
+      case (None, None) => () // Accept legacy/current fundee-side AcceptChannel that omits ChannelTypeTlv
+      case (Some(proposed: SupportedChannelType), Some(received))
+        if proposed == received =>
+        ()
+      case (Some(_), Some(received)) =>
+        throw InvalidChannelType(accept.temporaryChannelId, received)
+      case _ =>
+        throw MissingChannelType(accept.temporaryChannelId)
+    }
+
     val reserveToFundingRatio = accept.channelReserveSatoshis.toLong.toDouble / Math.max(open.fundingSatoshis.toLong, 1)
     if (reserveToFundingRatio > LNParams.maxReserveToFundingRatio) throw ChannelReserveTooHigh(open.temporaryChannelId, reserveToFundingRatio, LNParams.maxReserveToFundingRatio)
     if (accept.channelReserveSatoshis < open.dustLimitSatoshis) throw ChannelReserveBelowOurDustLimit(accept.temporaryChannelId, accept.channelReserveSatoshis, open.dustLimitSatoshis)
@@ -100,6 +122,7 @@ object Helpers {
   }
 
   type HashToPreimage = Map[ByteVector32, ByteVector32]
+
   def extractRevealedPreimages(updates: Iterable[UpdateMessage] = Nil): HashToPreimage =
     updates.collect { case upd: UpdateFulfillHtlc => upd.paymentHash -> upd.paymentPreimage }.toMap
 
@@ -107,16 +130,21 @@ object Helpers {
     sealed trait ClosingType
 
     case class MutualClose(tx: Transaction) extends ClosingType
+
     case class LocalClose(localCommit: LocalCommit, localCommitPublished: LocalCommitPublished) extends ClosingType
 
     sealed trait RemoteClose extends ClosingType {
       def remoteCommitPublished: RemoteCommitPublished
+
       def remoteCommit: RemoteCommit
     }
 
     case class CurrentRemoteClose(remoteCommit: RemoteCommit, remoteCommitPublished: RemoteCommitPublished) extends RemoteClose
+
     case class NextRemoteClose(remoteCommit: RemoteCommit, remoteCommitPublished: RemoteCommitPublished) extends RemoteClose
+
     case class RevokedClose(revokedCommitPublished: RevokedCommitPublished) extends ClosingType
+
     case class RecoveryClose(remoteCommitPublished: RemoteCommitPublished) extends ClosingType
 
     def isClosingTypeAlreadyKnown(c: DATA_CLOSING): Option[ClosingType] = c match {
@@ -166,11 +194,17 @@ object Helpers {
     }
 
     def checkClosingSignature(commitments: NormalCommits, localScriptPubkey: ByteVector, remoteScriptPubkey: ByteVector, remote: ClosingSigned): Transaction = {
-      val lastCommitFeeSatoshi = commitments.commitInput.txOut.amount - commitments.localCommit.publishableTxs.commitTx.tx.txOut.map(_.amount).sum
-      if (remote.feeSatoshis > lastCommitFeeSatoshi) throw ChannelTransitionFail(commitments.channelId, remote)
-
       val localFundingKey = commitments.localParams.keys.fundingKey.publicKey
       val (closingTx, closingSigned) = makeClosingTx(commitments, localScriptPubkey, remoteScriptPubkey, remote.feeSatoshis)
+
+      // Zero-fee anchor commit txs pay no fee, so the legacy "closing fee <= last commit fee" bound collapses to zero
+      // Fall back to bounding the closing fee against the closing tx weight at a generous multiple of the commit feerate
+      val lastCommitFeeSatoshi = commitments.commitInput.txOut.amount - commitments.localCommit.publishableTxs.commitTx.tx.txOut.map(_.amount).sum
+      val maxAcceptableFee: Satoshi = if (lastCommitFeeSatoshi > 0L.sat) lastCommitFeeSatoshi else {
+        val signedDummy = Transactions.addSigs(closingTx, invalidPubKey, commitments.remoteParams.fundingPubKey, Transactions.PlaceHolderSig, Transactions.PlaceHolderSig).tx
+        Transactions.weight2fee(commitments.localCommit.spec.feeratePerKw * 5L, Transaction.weight(signedDummy))
+      }
+      if (remote.feeSatoshis > maxAcceptableFee) throw ChannelTransitionFail(commitments.channelId, remote)
 
       val isAllUtxosAboveDust = checkClosingDustAmounts(closingTx)
       if (!isAllUtxosAboveDust) throw ChannelTransitionFail(commitments.channelId, remote)
@@ -193,6 +227,7 @@ object Helpers {
     }
 
     type SkippedOrTxInfo = Either[TxGenerationSkipped, TransactionWithInputInfo]
+
     private def generateTx(attempt: => SkippedOrTxInfo): Option[TransactionWithInputInfo] =
       Try(attempt) map { case Right(txinfo) => Some(txinfo) case _ => None } getOrElse None
 
@@ -229,11 +264,12 @@ object Helpers {
       }
 
       val htlcDelayedTxes = htlcTxes.flatMap {
-        info: TransactionWithInputInfo => generateTx {
-          val delayedToSig = cs.localParams.keys.sign(_: ClaimLocalDelayedOutputTx, cs.localParams.keys.delayedPaymentKey.privateKey, localPerCommitmentPoint, TxOwner.Local, cs.channelFeatures.commitmentFormat)
-          val tx1 = Transactions.makeClaimLocalDelayedOutputTx(info.tx, cs.localParams.dustLimit, localRevPubkey, cs.remoteParams.toSelfDelay, localDelayPubkey, cs.localParams.defaultFinalScriptPubKey, feeratePerKwDelayed)
-          for (claimDelayed <- tx1.right) yield Transactions.addSigs(localSig = delayedToSig(claimDelayed), claimDelayedOutputTx = claimDelayed)
-        }
+        info: TransactionWithInputInfo =>
+          generateTx {
+            val delayedToSig = cs.localParams.keys.sign(_: ClaimLocalDelayedOutputTx, cs.localParams.keys.delayedPaymentKey.privateKey, localPerCommitmentPoint, TxOwner.Local, cs.channelFeatures.commitmentFormat)
+            val tx1 = Transactions.makeClaimLocalDelayedOutputTx(info.tx, cs.localParams.dustLimit, localRevPubkey, cs.remoteParams.toSelfDelay, localDelayPubkey, cs.localParams.defaultFinalScriptPubKey, feeratePerKwDelayed)
+            for (claimDelayed <- tx1.right) yield Transactions.addSigs(localSig = delayedToSig(claimDelayed), claimDelayedOutputTx = claimDelayed)
+          }
       }
 
       val mainDelayedTxOpt = for (info <- mainDelayedTx) yield info.tx
@@ -369,6 +405,7 @@ object Helpers {
     }
 
     type OurAddAndPreimage = (UpdateAddHtlc, ByteVector32)
+
     def extractPreimages(localCommit: LocalCommit, tx: Transaction): Set[OurAddAndPreimage] = {
       val claimHtlcSuccess = tx.txIn.map(_.witness).collect(Scripts.extractPreimageFromClaimHtlcSuccess)
       val htlcSuccess = tx.txIn.map(_.witness).collect(Scripts.extractPreimageFromHtlcSuccess)
@@ -389,6 +426,7 @@ object Helpers {
 
     def timedoutHtlcs(cs: NormalCommits, localCommit: LocalCommit, localCommitPublished: LocalCommitPublished, tx: Transaction): (Set[UpdateAddHtlc], Boolean) = {
       def finder(hash: ByteVector): Option[UpdateAddHtlc] = findTimedOutHtlc(tx, hash, untrimmedHtlcs, Scripts.extractPaymentHashFromHtlcTimeout, localCommitPublished.htlcTimeoutTxs)
+
       lazy val untrimmedHtlcs = trimOfferedHtlcs(cs.localParams.dustLimit, localCommit.spec, cs.channelFeatures.commitmentFormat).map(_.add)
 
       // Fail dusty HTLCs if it's a commit tx, otherwise find the ones with matching hash
@@ -398,6 +436,7 @@ object Helpers {
 
     def timedoutHtlcs(cs: NormalCommits, remoteCommit: RemoteCommit, remoteCommitPublished: RemoteCommitPublished, tx: Transaction): (Set[UpdateAddHtlc], Boolean) = {
       def finder(hash: ByteVector): Option[UpdateAddHtlc] = findTimedOutHtlc(tx, hash, untrimmedHtlcs, Scripts.extractPaymentHashFromClaimHtlcTimeout, remoteCommitPublished.claimHtlcTimeoutTxs)
+
       lazy val untrimmedHtlcs = trimReceivedHtlcs(cs.remoteParams.dustLimit, remoteCommit.spec, cs.channelFeatures.commitmentFormat).map(_.add)
 
       // Fail dusty HTLCs if it's a commit tx, otherwise find the ones with matching hash
@@ -502,6 +541,7 @@ object Helpers {
 
     def isLocalCommitDone(localCommitPublished: LocalCommitPublished): Boolean = {
       def unconfirmedParents(tx: Transaction): Set[ByteVector32] = tx.txIn.map(_.outPoint.txid).toSet -- localCommitPublished.irrevocablySpent.values.map(_.tx.txid)
+
       val unconfirmedHtlcDelayedTxes = localCommitPublished.claimHtlcDelayedTxs.filter(tx => unconfirmedParents(tx).isEmpty).filterNot(localCommitPublished.isIrrevocablySpent)
       val ourNextStageTxs = localCommitPublished.claimMainDelayedOutputTx.toSeq ++ localCommitPublished.htlcSuccessTxs ++ localCommitPublished.htlcTimeoutTxs
       val commitOutputsSpendableByUs = ourNextStageTxs.flatMap(_.txIn).map(_.outPoint).toSet -- localCommitPublished.irrevocablySpent.keys
@@ -517,7 +557,9 @@ object Helpers {
     def isRevokedCommitDone(revokedCommitPublished: RevokedCommitPublished): Boolean = {
       // If one of the tx inputs has been spent, the tx has already been confirmed or a competing tx has been confirmed
       def alreadySpent(tx: Transaction): Boolean = tx.txIn.exists(input => revokedCommitPublished.irrevocablySpent contains input.outPoint)
+
       def unconfirmedParents(tx: Transaction): Set[ByteVector32] = tx.txIn.map(_.outPoint.txid).toSet -- revokedCommitPublished.irrevocablySpent.values.map(_.tx.txid)
+
       val unconfirmedHtlcDelayedTxs = revokedCommitPublished.claimHtlcDelayedPenaltyTxs.filter(tx => unconfirmedParents(tx).isEmpty).filterNot(alreadySpent)
       val ourNextStageTxs = revokedCommitPublished.claimMainOutputTx.toSeq ++ revokedCommitPublished.mainPenaltyTx ++ revokedCommitPublished.htlcPenaltyTxs
       val commitOutputsSpendableByUs = ourNextStageTxs.flatMap(_.txIn).map(_.outPoint).toSet -- revokedCommitPublished.irrevocablySpent.keys
