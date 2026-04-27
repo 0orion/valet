@@ -26,6 +26,12 @@ import scala.util.Try
 
 
 object ChannelNormal {
+  // Deterministic SCID alias derived from channelId. Constrained to 48 bits so the value
+  // is unambiguously non-negative when interpreted as a signed Long and stays well within
+  // the unsigned uint64 range expected by peers tracking aliases as UInt64.
+  def stableAlias(channelId: ByteVector32): Long =
+    channelId.bytes.take(8).toArray.foldLeft(0L)((acc, b) => (acc << 8) | (b & 0xff)) & 0x0000ffffffffffffL
+
   def make(initListeners: Set[ChannelListener], normalData: HasNormalCommitments, bag: ChannelBag): ChannelNormal = new ChannelNormal(bag) {
     def SEND(messages: LightningMessage*): Unit = CommsTower.sendMany(messages, normalData.commitments.remoteInfo.nodeSpecificPair)
     def STORE(normalData1: PersistentChannelData): PersistentChannelData = bag.put(normalData1)
@@ -159,7 +165,7 @@ abstract class ChannelNormal(bag: ChannelBag) extends Channel {
       case (wait: DATA_WAIT_FOR_FUNDING_CONFIRMED, event: WatchEventConfirmed, SLEEPING | WAIT_FUNDING_DONE) =>
         if (Try(wait checkSpend event.txConfirmedAt.tx).isFailure) StoreBecomeSend(DATA_CLOSING(wait.commitments, System.currentTimeMillis), CLOSING) else {
           // Derive a stable alias from channelId first 8 bytes (option_scid_alias: we MUST include alias TLV)
-          val ourAlias = wait.channelId.bytes.take(8).toArray.foldLeft(0L)((acc, b) => (acc << 8) | (b & 0xff))
+          val ourAlias = ChannelNormal.stableAlias(wait.channelId)
           val aliasTlv = TlvStream[FundingLockedTlv](FundingLockedTlv.ShortChannelIdAlias(ourAlias))
           val channelId = wait.channelId;
           val nextPerCommitmentPoint = wait.commitments.localParams.keys.commitmentPoint(1L);
@@ -214,10 +220,15 @@ abstract class ChannelNormal(bag: ChannelBag) extends Channel {
         StoreBecomeSend(some withNewCommits some.commitments.copy(remoteInfo = remoteInfo.safeAlias), state)
 
 
-      case (norm: DATA_NORMAL, update: ChannelUpdate, OPEN | SLEEPING) if norm.commitments.updateOpt.forall(_.core != update.core) =>
-        // Accept channel_update regardless of shortChannelId: modern peers (e.g. Eclair) use synthetic alias SCIDs
-        // (option_scid_alias) in their updates. The update arrives over the authenticated peer connection so we trust
-        // it is for this channel. Using the alias SCID in routing hints lets the peer forward incoming HTLCs correctly.
+      case (norm: DATA_NORMAL, update: ChannelUpdate, OPEN | SLEEPING)
+        if norm.commitments.updateOpt.forall(_.core != update.core) &&
+          (update.shortChannelId == norm.shortChannelId ||
+            update.shortChannelId == ChannelNormal.stableAlias(norm.commitments.channelId) ||
+            norm.commitments.remoteAlias.contains(update.shortChannelId)) =>
+        // ChannelMaster.onMessage broadcasts every ChannelUpdate to all channels with the same peer, so we
+        // must filter by SCID to avoid one channel's update clobbering updateOpt on a sibling channel.
+        // Accept any of: the real on-chain SCID, the alias we sent in our channel_ready (peers send updates
+        // referring to a channel by the alias we asked them to use), or the remote's alias.
         StoreBecomeSend(norm withNewCommits norm.commitments.copy(updateOpt = update.asSome), state)
 
 
@@ -494,7 +505,7 @@ abstract class ChannelNormal(bag: ChannelBag) extends Channel {
             // (b) we don't yet know the remote alias (prompts peer to send back their channel_ready with alias TLV)
             if (rs.nextLocalCommitmentNumber == 1 && norm.commitments.localCommit.index == 0 || norm.commitments.remoteAlias.isEmpty) {
               val nextPerCommitmentPoint = norm.commitments.localParams.keys.commitmentPoint(index = 1L)
-              val ourAlias = norm.commitments.channelId.bytes.take(8).toArray.foldLeft(0L)((acc, b) => (acc << 8) | (b & 0xff))
+              val ourAlias = ChannelNormal.stableAlias(norm.commitments.channelId)
               val aliasTlv = TlvStream[FundingLockedTlv](FundingLockedTlv.ShortChannelIdAlias(ourAlias))
               sendQueue :+= FundingLocked(norm.commitments.channelId, nextPerCommitmentPoint, aliasTlv)
             }

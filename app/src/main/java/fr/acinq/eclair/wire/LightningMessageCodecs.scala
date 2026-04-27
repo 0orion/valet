@@ -513,41 +513,43 @@ object LightningMessageCodecs {
   // EXTENDED MESSAGE UTILS
 
   def decode(msg: UnknownMessage): LightningMessage = {
-    val codec = msg.tag match {
-      case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec
-      case HC_LAST_CROSS_SIGNED_STATE_TAG => lastCrossSignedStateCodec
-      case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec
-      case HC_INIT_HOSTED_CHANNEL_TAG => initHostedChannelCodec
-      case HC_STATE_OVERRIDE_TAG => stateOverrideCodec
-      case HC_RESIZE_CHANNEL_TAG => resizeChannelCodec
-      case HC_MARGIN_CHANNEL_TAG => marginChannelCodec
-      case HC_STATE_UPDATE_TAG => stateUpdateCodec
+    val codec: Option[Codec[_ <: LightningMessage]] = msg.tag match {
+      case HC_HOSTED_CHANNEL_BRANDING_TAG => Some(hostedChannelBrandingCodec)
+      case HC_LAST_CROSS_SIGNED_STATE_TAG => Some(lastCrossSignedStateCodec)
+      case HC_INVOKE_HOSTED_CHANNEL_TAG => Some(invokeHostedChannelCodec)
+      case HC_INIT_HOSTED_CHANNEL_TAG => Some(initHostedChannelCodec)
+      case HC_STATE_OVERRIDE_TAG => Some(stateOverrideCodec)
+      case HC_RESIZE_CHANNEL_TAG => Some(resizeChannelCodec)
+      case HC_MARGIN_CHANNEL_TAG => Some(marginChannelCodec)
+      case HC_STATE_UPDATE_TAG => Some(stateUpdateCodec)
 
-      case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec
-      case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec
-      case HC_QUERY_PREIMAGES_TAG => queryPreimagesCodec
-      case HC_REPLY_PREIMAGES_TAG => replyPreimagesCodec
-      case HC_ASK_BRANDING_INFO => askBrandingInfoCodec
+      case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => Some(queryPublicHostedChannelsCodec)
+      case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => Some(replyPublicHostedChannelsEndCodec)
+      case HC_QUERY_PREIMAGES_TAG => Some(queryPreimagesCodec)
+      case HC_REPLY_PREIMAGES_TAG => Some(replyPreimagesCodec)
+      case HC_ASK_BRANDING_INFO => Some(askBrandingInfoCodec)
 
-      case PHC_ANNOUNCE_GOSSIP_TAG => channelAnnouncementCodec
-      case PHC_ANNOUNCE_SYNC_TAG => channelAnnouncementCodec
-      case PHC_UPDATE_GOSSIP_TAG => channelUpdateCodec
-      case PHC_UPDATE_SYNC_TAG => channelUpdateCodec
+      case PHC_ANNOUNCE_GOSSIP_TAG => Some(channelAnnouncementCodec)
+      case PHC_ANNOUNCE_SYNC_TAG => Some(channelAnnouncementCodec)
+      case PHC_UPDATE_GOSSIP_TAG => Some(channelUpdateCodec)
+      case PHC_UPDATE_SYNC_TAG => Some(channelUpdateCodec)
 
-      case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec
-      case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec
-      case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec
-      case HC_UPDATE_ADD_HTLC_TAG => updateAddHtlcCodec
-      case HC_ERROR_TAG => failCodec
+      case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => Some(updateFailMalformedHtlcCodec)
+      case HC_UPDATE_FULFILL_HTLC_TAG => Some(updateFulfillHtlcCodec)
+      case HC_UPDATE_FAIL_HTLC_TAG => Some(updateFailHtlcCodec)
+      case HC_UPDATE_ADD_HTLC_TAG => Some(updateAddHtlcCodec)
+      case HC_ERROR_TAG => Some(failCodec)
 
-      case HC_QUERY_RATE_TAG => provide(QueryCurrentRate())
-      case HC_REPLY_RATE_TAG => replyCurrentRateCodec
+      case HC_QUERY_RATE_TAG => Some(provide(QueryCurrentRate()))
+      case HC_REPLY_RATE_TAG => Some(replyCurrentRateCodec)
       //case HC_PROPOSE_INVOICE_TAG => proposeInvoiceCodec
 
-      case _ => throw new RuntimeException
+      // Unknown extended tag: do not throw — return the wrapper as-is so the caller
+      // can ignore it instead of the receive loop dying and dropping the connection.
+      case _ => None
     }
 
-    codec.decode(msg.data.toBitVector).require.value
+    codec.map(_.decode(msg.data.toBitVector).require.value).getOrElse(msg)
   }
 
   // Extended messages need to be wrapped in UnknownMessage

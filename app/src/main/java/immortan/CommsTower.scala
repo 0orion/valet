@@ -76,7 +76,10 @@ object CommsTower {
             case message: Ping => handler process Pong(ByteVector fromValidHex "00" * message.pongLength)
 
             case message: UnknownMessage =>
-              LightningMessageCodecs.decode(message) match {
+              // decode may still throw if a known tag carries a malformed payload; isolate that
+              // here so a single bad message can't tear down the worker thread and drop the peer.
+              val decoded: LightningMessage = try LightningMessageCodecs.decode(message) catch { case _: Throwable => message }
+              decoded match {
                 case msg: HostedChannelMessage => for (lst <- ourListeners) lst.onHostedMessage(me, msg)
                 case msg: SwapOut => for (lst <- ourListeners) lst.onSwapOutMessage(me, msg)
                 case msg: SwapIn => for (lst <- ourListeners) lst.onSwapInMessage(me, msg)
