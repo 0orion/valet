@@ -122,12 +122,16 @@ abstract class ChannelNormal(bag: ChannelBag) extends Channel {
 
       case (null, init: INPUT_INIT_FUNDEE, -1) =>
         val ChannelKeys(_, _, fundingKey, revocationKey, _, delayedPaymentKey, htlcKey) = init.localParams.keys
-        val emptyUpfrontShutdown: TlvStream[AcceptChannelTlv] = TlvStream(ChannelTlv UpfrontShutdownScript ByteVector.empty)
+        // Echo back the funder's channel type (BOLT 2: fundee MUST set channel_type to the same value
+        // as in open_channel, so the funder's validateParamsFunder check doesn't reject our accept_channel).
+        val acceptTlvRecords = Seq[AcceptChannelTlv](ChannelTlv.UpfrontShutdownScript(ByteVector.empty)) ++
+          init.channelFeatures.channelType_opt.map(ChannelTlv.ChannelTypeTlv).toSeq
+        val acceptTlvStream: TlvStream[AcceptChannelTlv] = TlvStream(acceptTlvRecords: _*)
 
         val accept = AcceptChannel(init.theirOpen.temporaryChannelId, init.localParams.dustLimit, init.localParams.maxHtlcValueInFlightMsat, init.localParams.channelReserve,
           init.localParams.htlcMinimum, minimumDepth = LNParams.minDepthBlocks, init.localParams.toSelfDelay, init.localParams.maxAcceptedHtlcs, fundingPubkey = fundingKey.publicKey,
           revocationBasepoint = revocationKey.publicKey, paymentBasepoint = init.localParams.walletStaticPaymentBasepoint, delayedPaymentBasepoint = delayedPaymentKey.publicKey,
-          htlcBasepoint = htlcKey.publicKey, init.localParams.keys.commitmentPoint(index = 0L), emptyUpfrontShutdown)
+          htlcBasepoint = htlcKey.publicKey, init.localParams.keys.commitmentPoint(index = 0L), acceptTlvStream)
 
         val data1 = DATA_WAIT_FOR_FUNDING_CREATED(init, RemoteParams(init.theirOpen.dustLimitSatoshis, init.theirOpen.maxHtlcValueInFlightMsat, init.theirOpen.channelReserveSatoshis,
           init.theirOpen.htlcMinimumMsat, init.theirOpen.toSelfDelay, init.theirOpen.maxAcceptedHtlcs, init.theirOpen.fundingPubkey, init.theirOpen.revocationBasepoint,
