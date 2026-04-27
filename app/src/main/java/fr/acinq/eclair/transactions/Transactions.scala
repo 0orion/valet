@@ -627,9 +627,12 @@ object Transactions {
         val weight = addSigs(ClaimRemoteDelayedOutputTx(input, tx), PlaceHolderSig).tx.weight()
         val fee = weight2fee(feeratePerKw, weight)
         val amount = input.txOut.amount - fee
-        // Always create transaction, even if dust. Mark as dust for coin selection filtering.
-        val tx1 = tx.copy(txOut = tx.txOut.head.copy(amount = amount) :: Nil)
-        Right(ClaimRemoteDelayedOutputTx(input, tx1))
+        if (amount < localDustLimit) {
+          Left(AmountBelowDustLimit)
+        } else {
+          val tx1 = tx.copy(txOut = tx.txOut.head.copy(amount = amount) :: Nil)
+          Right(ClaimRemoteDelayedOutputTx(input, tx1))
+        }
     }
   }
 
@@ -650,9 +653,12 @@ object Transactions {
         val weight = addSigs(ClaimLocalDelayedOutputTx(input, tx), PlaceHolderSig).tx.weight()
         val fee = weight2fee(feeratePerKw, weight)
         val amount = input.txOut.amount - fee
-        // Always create transaction, even if dust. Mark as dust for coin selection filtering.
-        val tx1 = tx.copy(txOut = tx.txOut.head.copy(amount = amount) :: Nil)
-        Right(ClaimLocalDelayedOutputTx(input, tx1))
+        if (amount < localDustLimit) {
+          Left(AmountBelowDustLimit)
+        } else {
+          val tx1 = tx.copy(txOut = tx.txOut.head.copy(amount = amount) :: Nil)
+          Right(ClaimLocalDelayedOutputTx(input, tx1))
+        }
     }
   }
 
