@@ -200,10 +200,10 @@ class SyncParams {
   val bCashIsTrash: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"0298f6074a454a1f5345cb2a7c6f9fce206cd0bf675d177cdbf0ca7508dd28852f"), NodeAddress.unresolved(9735, host = 73, 119, 255, 56), "bCashIsTrash")
   val silentBob: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"02e9046555a9665145b0dbd7f135744598418df7d61d3660659641886ef1274844"), NodeAddress.unresolved(9735, host = 31, 16, 52, 37), "SilentBob")
   val acinq: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"), NodeAddress.unresolved(9735, host = 34, 239, 230, 56), "ACINQ")
-  val localNode: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"035912832c3eea544dc1c1bd4569f3f1f4ef58887c4df88fa17a899c84f093e3e6"), NodeAddress.unresolved(56175, host = 10, 0, 2, 2), "localnode")
+  val localNode: RemoteNodeInfo = RemoteNodeInfo(PublicKey(hex"035912832c3eea544dc1c1bd4569f3f1f4ef58887c4df88fa17a899c84f093e3e6"), NodeAddress.unresolved(56175, host = 192, 168, 2, 11), "localnode")
 
   val syncNodes: Set[RemoteNodeInfo] = Set(satm, sts, bCashIsTrash, silentBob, acinq, localNode)
-  val phcSyncNodes: Set[RemoteNodeInfo] = Set(satm, sts)
+  val phcSyncNodes: Set[RemoteNodeInfo] = Set.empty // Set(satm, sts) - disabled until later
 
   val maxPHCCapacity: MilliSatoshi = MilliSatoshi(100000000000000L) // PHC can not be larger than 1000 BTC
   val minPHCCapacity: MilliSatoshi = MilliSatoshi(1000000000L) // PHC can not be smaller than 0.01 BTC
