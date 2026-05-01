@@ -130,7 +130,8 @@ import java.util.zip.*
 task normalizeApkTimestamps {
     doLast {
         def sourceDateEpoch = System.getenv('SOURCE_DATE_EPOCH')?.toLong() ?: 0
-        def apkFile = file("${buildDir}/outputs/apk/release/finance.valet_${defaultConfig.versionCode}.apk")
+        def versionCode = android.defaultConfig.versionCode
+        def apkFile = file("${buildDir}/outputs/apk/release/finance.valet_${versionCode}.apk")
         def tempFile = file("${apkFile}.tmp")
 
         new ZipOutputStream(new FileOutputStream(tempFile)).withCloseable { zos ->
