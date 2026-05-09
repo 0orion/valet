@@ -23,13 +23,13 @@ android {
 
     defaultConfig {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        applicationId 'finance.valet.testnet'
+        applicationId 'finance.valet'
         multiDexEnabled true
         targetSdkVersion 33
         minSdkVersion 21
 
         versionName '5.0.0'
-        versionCode 106
+        versionCode 107 // even for testnets, odd for mainnet
         if (System.getenv("SIGNING_KEY_ALIAS")) {
             signingConfig signingConfigs.release
         }
@@ -130,17 +130,26 @@ import java.util.zip.*
 task normalizeApkTimestamps {
     doLast {
         def sourceDateEpoch = System.getenv('SOURCE_DATE_EPOCH')?.toLong() ?: 0
-        def apkFile = file("${buildDir}/outputs/apk/release/finance.valet_${defaultConfig.versionCode}.apk")
+        def versionCode = android.defaultConfig.versionCode
+        def apkFile = file("${buildDir}/outputs/apk/release/finance.valet_${versionCode}.apk")
         def tempFile = file("${apkFile}.tmp")
 
         new ZipOutputStream(new FileOutputStream(tempFile)).withCloseable { zos ->
             new ZipFile(apkFile).withCloseable { zip ->
-                zip.entries().each { entry ->
-                    def newEntry = new ZipEntry(entry.name)
+                zip.entries().each { srcEntry ->
+                    def newEntry = new ZipEntry(srcEntry.name)
                     newEntry.time = sourceDateEpoch * 1000
+                    // Android R+ requires resources.arsc (and uncompressed .so when
+                    // extractNativeLibs=false) to stay STORED. Alignment is handled by zipalign.
+                    newEntry.method = srcEntry.method
+                    if (srcEntry.method == ZipEntry.STORED) {
+                        newEntry.size = srcEntry.size
+                        newEntry.compressedSize = srcEntry.compressedSize
+                        newEntry.crc = srcEntry.crc
+                    }
                     zos.putNextEntry(newEntry)
-                    if (!entry.isDirectory()) {
-                        zos.write(zip.getInputStream(entry).bytes)
+                    if (!srcEntry.isDirectory()) {
+                        zos.write(zip.getInputStream(srcEntry).bytes)
                     }
                     zos.closeEntry()
                 }
@@ -152,6 +161,33 @@ task normalizeApkTimestamps {
     }
 }
 
+task zipalignApk(type: Exec) {
+    dependsOn normalizeApkTimestamps
+    def versionCode = android.defaultConfig.versionCode
+    def buildToolsDir = "${android.sdkDirectory}/build-tools/${android.buildToolsVersion}"
+    def apkFile = file("${buildDir}/outputs/apk/release/finance.valet_${versionCode}.apk")
+    def alignedFile = file("${apkFile}.aligned")
+    commandLine "${buildToolsDir}/zipalign", '-f', '-p', '4', apkFile.absolutePath, alignedFile.absolutePath
+    doLast {
+        apkFile.delete()
+        alignedFile.renameTo(apkFile)
+    }
+}
+
+task signApk(type: Exec) {
+    dependsOn zipalignApk
+    onlyIf { System.getenv("SIGNING_KEY_ALIAS") != null }
+    def versionCode = android.defaultConfig.versionCode
+    def buildToolsDir = "${android.sdkDirectory}/build-tools/${android.buildToolsVersion}"
+    def apkFile = file("${buildDir}/outputs/apk/release/finance.valet_${versionCode}.apk")
+    commandLine "${buildToolsDir}/apksigner", 'sign',
+            '--ks', System.getenv("SIGNING_STORE_FILENAME") ?: '',
+            '--ks-key-alias', System.getenv("SIGNING_KEY_ALIAS") ?: '',
+            '--ks-pass', "pass:${System.getenv('SIGNING_STORE_PASSWORD') ?: ''}",
+            '--key-pass', "pass:${System.getenv('SIGNING_KEY_PASSWORD') ?: ''}",
+            apkFile.absolutePath
+}
+
 tasks.matching { it.name.startsWith("assembleRelease") }.configureEach {
-    finalizedBy(normalizeApkTimestamps)
+    finalizedBy(signApk)
 }

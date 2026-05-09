@@ -150,11 +150,11 @@ object WalletApp {
 
     // In case these are needed early
     LNParams.logBag = new SQLiteLog(miscInterface)
-    LNParams.chainHash = Block.Testnet4GenesisBlock.hash
+    LNParams.chainHash = Block.LivenetGenesisBlock.hash
     LNParams.routerConf = RouterConf(initRouteMaxLength = 10, LNParams.maxCltvExpiryDelta)
     LNParams.connectionProvider = if (ensureTor) new TorConnectionProvider(app) else new ClearnetConnectionProvider
     LNParams.ourInit = LNParams.createInit
-    LNParams.syncParams = new TestNet4SyncParams
+    LNParams.syncParams = new SyncParams
     LNParams.ourInit = LNParams.createInit
   }
 
