@@ -119,10 +119,10 @@ class HubActivity extends NfcReaderActivity with ChanErrorHandlerActivity with E
 
   // PAYMENT LIST
 
-  def reloadTxInfos: Unit = txInfos = WalletApp.txDataBag.listRecentTxs(20).map(WalletApp.txDataBag.toTxInfo)
-  def reloadPaymentInfos: Unit = paymentInfos = LNParams.cm.payBag.listRecentPayments(20).map(LNParams.cm.payBag.toPaymentInfo)
-  def reloadRelayedPreimageInfos: Unit = relayedPreimageInfos = LNParams.cm.payBag.listRecentRelays(20).map(LNParams.cm.payBag.toRelayedPreimageInfo)
-  def reloadPayMarketInfos: Unit = lnUrlPayLinks = WalletApp.lnUrlPayBag.listRecentLinks(20).map(WalletApp.lnUrlPayBag.toLinkInfo)
+  def reloadTxInfos: Unit = txInfos = WalletApp.txDataBag.listRecentTxs(20).iterable(WalletApp.txDataBag.toTxInfo)
+  def reloadPaymentInfos: Unit = paymentInfos = LNParams.cm.payBag.listRecentPayments(20).iterable(LNParams.cm.payBag.toPaymentInfo)
+  def reloadRelayedPreimageInfos: Unit = relayedPreimageInfos = LNParams.cm.payBag.listRecentRelays(20).iterable(LNParams.cm.payBag.toRelayedPreimageInfo)
+  def reloadPayMarketInfos: Unit = lnUrlPayLinks = WalletApp.lnUrlPayBag.listRecentLinks(20).iterable(WalletApp.lnUrlPayBag.toLinkInfo)
 
   def isImportantItem: PartialFunction[TransactionDetails, Boolean] = {
     case anyFreshInfo if anyFreshInfo.updatedAt > disaplyThreshold => true
@@ -150,9 +150,9 @@ class HubActivity extends NfcReaderActivity with ChanErrorHandlerActivity with E
   }
 
   def loadSearch(query: String): Unit = WalletApp.txDataBag.db.txWrap {
-    txInfos = WalletApp.txDataBag.searchTransactions(query).map(WalletApp.txDataBag.toTxInfo)
-    paymentInfos = LNParams.cm.payBag.searchPayments(query).map(LNParams.cm.payBag.toPaymentInfo)
-    lnUrlPayLinks = WalletApp.lnUrlPayBag.searchLinks(query).map(WalletApp.lnUrlPayBag.toLinkInfo)
+    txInfos = WalletApp.txDataBag.searchTransactions(query).iterable(WalletApp.txDataBag.toTxInfo)
+    paymentInfos = LNParams.cm.payBag.searchPayments(query).iterable(LNParams.cm.payBag.toPaymentInfo)
+    lnUrlPayLinks = WalletApp.lnUrlPayBag.searchLinks(query).iterable(WalletApp.lnUrlPayBag.toLinkInfo)
     updAllInfos
   }
 

@@ -150,12 +150,20 @@ object WalletApp {
 
     // In case these are needed early
     LNParams.logBag = new SQLiteLog(miscInterface)
-    LNParams.chainHash = Block.LivenetGenesisBlock.hash
+
+    val (hash, params) = {
+      BuildConfig.FLAVOR match {
+        case "mainnet" => (Block.LivenetGenesisBlock.hash, new SyncParams)
+        case "tnet3" => (Block.Testnet3GenesisBlock.hash, new TestNet3SyncParams)
+        case "tnet4" => (Block.Testnet4GenesisBlock.hash, new TestNet4SyncParams)
+      }
+    }
+
+    LNParams.chainHash = hash
     LNParams.routerConf = RouterConf(initRouteMaxLength = 10, LNParams.maxCltvExpiryDelta)
     LNParams.connectionProvider = if (ensureTor) new TorConnectionProvider(app) else new ClearnetConnectionProvider
     LNParams.ourInit = LNParams.createInit
-    LNParams.syncParams = new SyncParams
-    LNParams.ourInit = LNParams.createInit
+    LNParams.syncParams = params
   }
 
   def makeOperational(secret: WalletSecret): Unit = {
@@ -194,14 +202,14 @@ object WalletApp {
     ElectrumClientPool.loadFromChainHash = {
       case _ if currentCustomElectrum.isSuccess => ElectrumServerAddress(currentCustomElectrum.get.socketAddress, SSL.DECIDE).asSome.toSet
       case Block.LivenetGenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_mainnet.json")
-      case Block.TestnetGenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_testnet.json")
+      case Block.Testnet3GenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_testnet3.json")
       case Block.Testnet4GenesisBlock.hash => ElectrumClientPool.readServerAddresses(app.getAssets open "servers_testnet4.json")
       case _ => throw new RuntimeException
     }
 
     CheckPoint.loadFromChainHash = {
       case Block.LivenetGenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_mainnet.json")
-      case Block.TestnetGenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_testnet.json")
+      case Block.Testnet3GenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_testnet3.json")
       case Block.Testnet4GenesisBlock.hash => CheckPoint.load(app.getAssets open "checkpoints_testnet4.json")
       case _ => throw new RuntimeException
     }
