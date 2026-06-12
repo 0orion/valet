@@ -156,7 +156,7 @@ object WalletApp {
         case "mainnet" => (Block.LivenetGenesisBlock.hash, new SyncParams)
         case "tnet3" => (Block.Testnet3GenesisBlock.hash, new TestNet3SyncParams)
         case "tnet4" => (Block.Testnet4GenesisBlock.hash, new TestNet4SyncParams)
-        case "regtest" => (Block.RegtestGenesisBlock.hash, new SyncParams)
+        case "regtest" => (Block.RegtestGenesisBlock.hash, new RegtestSyncParams)
       }
     }
 
